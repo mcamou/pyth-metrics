@@ -140,9 +140,7 @@ func main() {
 
 	ticker := time.NewTicker(time.Duration(pollSecs) * time.Second)
 
-	for {
-		log.Debug("Waiting")
-		<-ticker.C
+	for ; ; <-ticker.C {
 		log.Debug("Starting loop")
 
 		if currentEpoch == 0 {
