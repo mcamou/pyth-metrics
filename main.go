@@ -96,12 +96,6 @@ func getBlockProductionForEpoch(c *client.Client, log *slog.Logger, epoch uint64
 func getEnv(varName string, defaultValue string, log *slog.Logger) string {
 	value := os.Getenv(varName)
 	if value == "" {
-		if defaultValue == "" {
-			msg := fmt.Sprintf("%s not set", varName)
-			log.Error(msg)
-			os.Exit(1)
-		}
-
 		return defaultValue
 	}
 	return value
@@ -110,19 +104,45 @@ func getEnv(varName string, defaultValue string, log *slog.Logger) string {
 func main() {
 	log := slog.New(slogenv.NewHandler(slog.NewJSONHandler(os.Stderr, nil)))
 
-	dryRun := flag.Bool("dry-run", false, "Do not post to InfluxDB, instead send metric lines to stdout")
+	dryRun := false
+
+	help := flag.Bool("help", false, "Show help text")
+	helpShort := flag.Bool("h", false, "Show help text")
 	flag.Parse()
 
-	var influxUrl, influxOrg, influxUser, influxPass, influxBucket string
+	if *help || *helpShort {
+		fmt.Fprintln(os.Stderr, `
+COMMAND-LINE FLAGS
 
-	if *dryRun {
-		log.Info("Running in dry-run mode")
-	} else {
-		influxUrl = getEnv("INFLUX_URL", "", log)
-		influxOrg = getEnv("INFLUX_ORG", "", log)
-		influxUser = getEnv("INFLUX_USER", "", log)
-		influxPass = getEnv("INFLUX_PASSWORD", "", log)
-		influxBucket = getEnv("INFLUX_BUCKET", "", log)
+--help - Show the help text
+
+ENVIRONMENT VARIABLES
+
+RPC_URL - URL of the PythNet RPC host (optional, default is the PythNet RPC host)
+
+If any of the following are not specified, the program will run in dry-run mode, outputting the metrics to stdout:
+
+INFLUX_URL - InfluxDB URL
+INFLUX_ORG - InfluxDB organization
+INFLUX_USER - InfluxDB user (for token v1 authentication)
+INFLUX_PASSWORD - InfluxDB password (for token v1 authentication)
+INFLUX_BUCKET - Bucket to save the metrics to
+`)
+		os.Exit(0)
+	}
+
+	influxUrl := getEnv("INFLUX_URL", "", log)
+	influxOrg := getEnv("INFLUX_ORG", "", log)
+	influxUser := getEnv("INFLUX_USER", "", log)
+	influxPass := getEnv("INFLUX_PASSWORD", "", log)
+	influxBucket := getEnv("INFLUX_BUCKET", "", log)
+
+	if influxUrl == "" || influxOrg == "" || influxUser == "" || influxPass == "" || influxBucket == "" {
+		dryRun = true
+	}
+
+	if dryRun {
+		log.Info("InfluxDB environment variables not set. Running in dry-run mode.")
 	}
 
 	rpcUrl := getEnv("RPC_URL", "https://api2.pythnet.pyth.network", log)
@@ -178,7 +198,7 @@ func main() {
 			metrics += getMetrics(blockProduction, currentEpoch)
 		}
 
-		if *dryRun {
+		if dryRun {
 			fmt.Printf("Sending:\n%s\n\n", metrics)
 			continue
 		}
